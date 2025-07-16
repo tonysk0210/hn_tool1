@@ -2,13 +2,14 @@ package org.example;
 
 import java.io.*;
 import java.sql.*;
+import java.util.Properties;
 import java.util.Scanner;
 
 public class TableMetaDataCSVHandler {
 
-    private static final String JDBC_URL = "jdbc:sqlserver://192.168.1.94:1433;databaseName=HN_Test;encrypt=true;trustServerCertificate=true";
-    private static final String USER = "sa";
-    private static final String PASSWORD = "1qaz2wsx";
+    private static final String JDBC_URL = ConfigLoader.get("jdbc.url");
+    private static final String USER = ConfigLoader.get("jdbc.user");
+    private static final String PASSWORD = ConfigLoader.get("jdbc.password");
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
