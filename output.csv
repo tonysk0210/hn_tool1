@@ -1,4 +1,4 @@
-System_Name,Seq,Table_Name,Table_Desc
+﻿System_Name,Seq,Table_Name,Table_Desc
 ,1,AGR_APPLICANT,
 ,2,AGR_BASE,
 ,3,AGR_FACTORY,
@@ -17,6 +17,7 @@ System_Name,Seq,Table_Name,Table_Desc
 ,16,COM_BASE,
 ,17,COM_ITEM,
 ,18,COM_MOD_ITEM,
+,19,HN_Table_List,
 LIC,1,LIC_BASE,許可證主檔
-,19,LIC_EXTEND,
-,20,LIC_FACTORY,
+,20,LIC_EXTEND,
+,21,LIC_FACTORY,
