@@ -37,39 +37,39 @@ public class TableMetaDataCSVHandler {
     //匯出成CSV
     private static void exportToCSV(String csvPath) throws Exception {
         String query = """
-    SELECT 
-        ISNULL(f.value, '') AS [System_Name],
-        ROW_NUMBER() OVER (
-            PARTITION BY f.value 
-            ORDER BY f.value, t.name
-        ) AS Seq,
-        t.name AS [Table_Name],
-        ISNULL(e.value, '') AS [Table_Desc]
-    FROM 
-        sys.tables t
-    LEFT JOIN (
-        SELECT 
-            major_id, 
-            name, 
-            value 
-        FROM 
-            sys.extended_properties
-        WHERE 
-            name = '用途說明'
-    ) e ON t.object_id = e.major_id
-    LEFT JOIN (
-        SELECT 
-            major_id, 
-            name, 
-            value 
-        FROM 
-            sys.extended_properties
-        WHERE 
-            name = '模組別'
-    ) f ON t.object_id = f.major_id
-    ORDER BY 
-        t.name;
-    """;
+                SELECT 
+                    ISNULL(f.value, '') AS [System_Name],
+                    ROW_NUMBER() OVER (
+                        PARTITION BY f.value 
+                        ORDER BY f.value, t.name
+                    ) AS Seq,
+                    t.name AS [Table_Name],
+                    ISNULL(e.value, '') AS [Table_Desc]
+                FROM 
+                    sys.tables t
+                LEFT JOIN (
+                    SELECT 
+                        major_id, 
+                        name, 
+                        value 
+                    FROM 
+                        sys.extended_properties
+                    WHERE 
+                        name = '用途說明'
+                ) e ON t.object_id = e.major_id
+                LEFT JOIN (
+                    SELECT 
+                        major_id, 
+                        name, 
+                        value 
+                    FROM 
+                        sys.extended_properties
+                    WHERE 
+                        name = '模組別'
+                ) f ON t.object_id = f.major_id
+                ORDER BY 
+                    t.name;
+                """;
 
         try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
              Statement stmt = conn.createStatement();
@@ -106,32 +106,57 @@ public class TableMetaDataCSVHandler {
     private static void importFromCSV(String csvPath) throws Exception {
         try (
                 Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
-                PreparedStatement pstmt = conn.prepareStatement(
-                        "INSERT INTO HN_Table_List (system_name, seq, table_name, table_desc) VALUES (?, ?, ?, ?)");
                 BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(csvPath), "UTF-8")) //read from .csv
         ) {
-            String line;
-            boolean firstLine = true;
+            // 1. 建立資料表（若不存在）
+            try (Statement stmt = conn.createStatement()) {
+                String createTableSQL = """
+                            IF NOT EXISTS (
+                                SELECT * FROM INFORMATION_SCHEMA.TABLES 
+                                WHERE TABLE_NAME = 'HN_Table_List'
+                            )
+                            CREATE TABLE HN_Table_List (
+                                System_Name NVARCHAR(100),
+                                Seq INT,
+                                Table_Name NVARCHAR(100),
+                                Table_Desc NVARCHAR(500)
+                            )
+                        """;
+                stmt.execute(createTableSQL);
 
-            // 清空舊資料
-            conn.createStatement().execute("TRUNCATE TABLE HN_Table_List");
-
-            while ((line = reader.readLine()) != null) {
-                if (firstLine) {
-                    firstLine = false;
-                    continue;
-                } // 跳過標題列
-                String[] parts = line.split(",", -1); // -1 保留空白欄位
-                if (parts.length < 4) continue;
-
-                pstmt.setString(1, parts[0].trim());
-                pstmt.setInt(2, Integer.parseInt(parts[1].trim()));
-                pstmt.setString(3, parts[2].trim());
-                pstmt.setString(4, parts[3].trim());
-                pstmt.addBatch();
+                // 2. 清空舊資料
+                stmt.execute("TRUNCATE TABLE HN_Table_List");
             }
-            pstmt.executeBatch();
-            System.out.println("✅ 匯入完成，資料已寫入 table_metadata");
+
+            // 3. 準備插入
+            try (PreparedStatement pstmt = conn.prepareStatement(
+                    "INSERT INTO HN_Table_List (System_Name, Seq, Table_Name, Table_Desc) VALUES (?, ?, ?, ?)")) {
+                String line;
+                boolean firstLine = true;
+
+                while ((line = reader.readLine()) != null) {
+                    if (firstLine) {
+                        firstLine = false;
+                        continue;
+                    } // 跳過標題列
+
+                    String[] parts = line.split(",", -1); // -1 保留空白欄位
+
+                    // 偵測問題行
+                    if (parts.length < 4) {
+                        System.err.println("⚠ 格式錯誤，欄位數不足：" + line);
+                        continue;
+                    }
+
+                    pstmt.setString(1, parts[0].trim());
+                    pstmt.setInt(2, Integer.parseInt(parts[1].trim()));
+                    pstmt.setString(3, parts[2].trim());
+                    pstmt.setString(4, parts[3].trim());
+                    pstmt.addBatch();
+                }
+                pstmt.executeBatch();
+                System.out.println("✅ 匯入完成，資料已寫入 HN_Table_List");
+            }
         }
     }
 }
