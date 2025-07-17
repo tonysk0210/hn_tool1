@@ -2,7 +2,8 @@ package org.example;
 
 import java.io.*;
 import java.sql.*;
-import java.util.Properties;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Scanner;
 
 public class TableMetaDataCSVHandler {
@@ -11,19 +12,26 @@ public class TableMetaDataCSVHandler {
     private static final String USER = ConfigLoader.get("jdbc.user");
     private static final String PASSWORD = ConfigLoader.get("jdbc.password");
 
+    //自動產出timestamp檔名
+    private static String generateTimestampedFilename() {
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+        String timestamp = LocalDateTime.now().format(formatter);
+        return "OUTPUT_" + timestamp + ".csv";
+    }
+
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("選擇功能:");
-        System.out.println("1. 匯出 metadata 為 CSV 進行人工修改");
-        System.out.println("2. 匯入修改後的 CSV 到 HN_Table_List 資料表");
+        System.out.println("====MENU====");
+        System.out.println("1. 匯出 CSV");
+        System.out.println("2. 將 CSV 寫入 HN_Table_List 資料表");
 
         int option = scanner.nextInt();
         scanner.nextLine(); //吃掉換行
 
         try {
             if (option == 1) {
-                System.out.println("請輸入匯出CSV的檔案名稱 (例如 output.csv)");
-                String outputPath = scanner.nextLine();
+                String outputPath = generateTimestampedFilename();
+                System.out.println("⏳ 自動產生的檔名為： " + outputPath);
                 exportToCSV(outputPath);
             } else if (option == 2) {
                 System.out.print("請輸入修改後的 CSV 路徑（例如 output.csv）：");
@@ -56,45 +64,27 @@ public class TableMetaDataCSVHandler {
      * <p>本方法會將中文資料以 UTF-8 編碼輸出，並加上 BOM 標頭，確保 CSV 檔可直接在 Excel 中正常顯示中文。</p>
      * <p>同時自動處理欄位值中出現的特殊字元（逗號、雙引號、換行）以符合 RFC 4180 CSV 規範。</p>
      *
-     * @param csvPath 匯出目標的 CSV 檔案完整路徑（例如：output.csv）
+     * @param csvPath 匯出目標的 CSV 檔案完整路徑（例如：1output.csv）
      * @throws SQLException 資料庫連線或查詢過程中發生錯誤時拋出
      * @throws IOException  檔案寫入過程中發生錯誤時拋出
      * @throws Exception    其他未預期的例外狀況
      */
     private static void exportToCSV(String csvPath) throws Exception {
         String query = """
-                SELECT 
-                    ISNULL(f.value, '') AS [System_Name],
-                    ROW_NUMBER() OVER (
-                        PARTITION BY f.value 
-                        ORDER BY f.value, t.name
-                    ) AS Seq,
-                    t.name AS [Table_Name],
-                    ISNULL(e.value, '') AS [Table_Desc]
-                FROM 
-                    sys.tables t
+                SELECT ISNULL(f.value, '') AS System_Name,
+                       ROW_NUMBER() OVER (PARTITION BY f.value ORDER BY f.value, t.name) AS Seq,
+                       t.name AS Table_Name,
+                       ISNULL(e.value, '') AS Table_Desc
+                FROM sys.tables t
                 LEFT JOIN (
-                    SELECT 
-                        major_id, 
-                        name, 
-                        value 
-                    FROM 
-                        sys.extended_properties
-                    WHERE 
-                        name = '用途說明'
+                    SELECT major_id, name, value FROM sys.extended_properties
+                    WHERE name = '用途說明'
                 ) e ON t.object_id = e.major_id
                 LEFT JOIN (
-                    SELECT 
-                        major_id, 
-                        name, 
-                        value 
-                    FROM 
-                        sys.extended_properties
-                    WHERE 
-                        name = '模組別'
+                    SELECT major_id, name, value FROM sys.extended_properties
+                    WHERE name = '模組別'
                 ) f ON t.object_id = f.major_id
-                ORDER BY 
-                    t.name;
+                ORDER BY t.name
                 """;
 
         try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
