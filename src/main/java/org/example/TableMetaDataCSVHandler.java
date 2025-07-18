@@ -1,9 +1,15 @@
 package org.example;
 
+import com.opencsv.CSVReader;
+import com.opencsv.exceptions.CsvValidationException;
+
+import javax.swing.*;
 import java.io.*;
 import java.sql.*;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Scanner;
 
 public class TableMetaDataCSVHandler {
@@ -34,9 +40,18 @@ public class TableMetaDataCSVHandler {
                 System.out.println("⏳ 自動產生的檔名為： " + outputPath);
                 exportToCSV(outputPath);
             } else if (option == 2) {
-                System.out.print("請輸入修改後的 CSV 路徑（例如 output.csv）：");
-                String inputPath = scanner.nextLine();
-                importFromCSV(inputPath);
+                JFileChooser fileChooser = new JFileChooser();
+                fileChooser.setDialogTitle("請選擇要匯入的 CSV 檔案");
+                int result = fileChooser.showOpenDialog(null);
+
+                if (result == JFileChooser.APPROVE_OPTION) {
+                    File selectedFile = fileChooser.getSelectedFile();
+                    String inputPath = selectedFile.getAbsolutePath();
+                    System.out.println("📂 選擇的檔案：" + inputPath);
+                    importFromCSV(inputPath);
+                } else {
+                    System.out.println("⚠ 已取消選擇檔案，未執行匯入。");
+                }
             }
         } catch (FileNotFoundException fnfe) {
             System.err.println("❌ 找不到指定的檔案或路徑錯誤：" + fnfe.getMessage());
@@ -84,6 +99,7 @@ public class TableMetaDataCSVHandler {
                     SELECT major_id, name, value FROM sys.extended_properties
                     WHERE name = '模組別'
                 ) f ON t.object_id = f.major_id
+                WHERE ISNULL(f.value, '') <> 'HN_Tools' -- ❗ 根據模組別排除
                 ORDER BY t.name
                 """;
 
@@ -147,55 +163,75 @@ public class TableMetaDataCSVHandler {
      * @throws SQLException          如果資料庫操作發生錯誤
      */
     private static void importFromCSV(String csvPath) throws Exception {
-        try (
-                Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
-                BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(csvPath), "UTF-8"))
-        ) {
+        try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
+             CSVReader csvReader = new CSVReader(new InputStreamReader(new FileInputStream(csvPath), "UTF-8"))) {
 
             conn.setAutoCommit(false);
             createTableIfNotExists(conn); //1. 建立 HN_Table_List 資料表 (若不存在)
             clearTable(conn); //2. 清空舊資料
 
             int successCount = 0, failCount = 0;
-            String line;
+            String[] row;
             boolean firstLine = true;
+            int lineNumber = 0;
+
+            // 新增：追蹤每個 System_Name 的 Seq 值
+            Map<String, Integer> seqMap = new HashMap<>();
 
             // 3. 準備插入
             try (PreparedStatement pstmt = conn.prepareStatement(
                     "INSERT INTO HN_Table_List (System_Name, Seq, Table_Name, Table_Desc) VALUES (?, ?, ?, ?)")) {
 
-                int lineNumber = 0;
-                while ((line = reader.readLine()) != null) {
+                while ((row = csvReader.readNext()) != null) {
                     lineNumber++;
                     if (firstLine) {
                         firstLine = false;
                         continue;
                     } // 跳過標題行
 
-                    String[] parts = line.split(",", -1); // -1 保留空白欄位
+//                    String[] parts = line.split(",", -1); // -1 保留空白欄位
+
                     // 偵測問題行
-                    if (parts.length < 4) {
-                        System.err.printf("⚠ 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, line);
+                    if (row.length < 4) {
+                        System.err.printf("⚠ 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                         continue;
                     }
 
                     try {
-                        pstmt.setString(1, parts[0].trim());
-                        pstmt.setInt(2, Integer.parseInt(parts[1].trim()));
-                        pstmt.setString(3, parts[2].trim());
-                        pstmt.setString(4, parts[3].trim());
+                        String systemName = row[0].trim();
+                        String tableName = row[2].trim();
+                        String tableDesc = row[3].trim();
+
+                        // 自動計算 Seq：每個 System_Name 從 1 開始遞增
+                        int seq = seqMap.compute(systemName, (k, v) -> (v == null) ? 1 : v + 1);
+
+                        pstmt.setString(1, systemName);
+                        pstmt.setInt(2, seq);
+                        pstmt.setString(3, tableName);
+                        pstmt.setString(4, tableDesc);
                         pstmt.addBatch();
                         successCount++;
                     } catch (NumberFormatException nfe) {
-                        System.err.printf("⚠ 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, line);
+                        System.err.printf("⚠ 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                     }
                 }
-                pstmt.executeBatch();
+                if (failCount == 0) {
+                    pstmt.executeBatch();
+                    conn.commit();
+                    System.out.printf("✅ 匯入成功，總筆數：%d%n", successCount);
+                } else {
+                    conn.rollback();
+                    System.err.printf("❌ 匯入失敗，偵測到 %d 筆錯誤，已取消所有變更。%n", failCount);
+                }
+            } catch (CsvValidationException e) {
+                conn.rollback();
+                throw new IOException("CSV 格式解析錯誤", e);
+            } catch (Exception e) {
+                conn.rollback();
+                throw e;
             }
-            conn.commit();
-            System.out.printf("✅ 匯入完成：成功 %d 筆，失敗 %d 筆%n", successCount, failCount);
         }
     }
 

@@ -21,6 +21,13 @@
             <artifactId>mssql-jdbc</artifactId>
             <version>12.6.1.jre11</version> <!-- 選用合適的版本 -->
         </dependency>
+
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.9</version>
+        </dependency>
+
     </dependencies>
 
 </project>
