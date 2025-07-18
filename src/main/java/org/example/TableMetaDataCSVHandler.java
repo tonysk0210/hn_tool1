@@ -18,50 +18,71 @@ public class TableMetaDataCSVHandler {
     private static final String USER = ConfigLoader.get("jdbc.user");
     private static final String PASSWORD = ConfigLoader.get("jdbc.password");
 
-    //自動產出timestamp檔名
+    //以timestamp自動產出.CSV檔名
     private static String generateTimestampedFilename() {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HH-mm-ss");
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss");
         String timestamp = LocalDateTime.now().format(formatter);
         return "OUTPUT_" + timestamp + ".csv";
     }
 
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
-        System.out.println("====MENU====");
-        System.out.println("1. 匯出 CSV");
-        System.out.println("2. 將 CSV 寫入 HN_Table_List 資料表");
 
-        int option = scanner.nextInt();
-        scanner.nextLine(); //吃掉換行
+        while (true) {
 
-        try {
-            if (option == 1) {
-                String outputPath = generateTimestampedFilename();
-                System.out.println("⏳ 自動產生的檔名為： " + outputPath);
-                exportToCSV(outputPath);
-            } else if (option == 2) {
-                JFileChooser fileChooser = new JFileChooser();
-                fileChooser.setDialogTitle("請選擇要匯入的 CSV 檔案");
-                int result = fileChooser.showOpenDialog(null);
+            System.out.println("==== MENU ====");
+            System.out.println("1. 匯出 .csv 供人工修改");
+            System.out.println("2. 將修改後 .csv 寫入 HN_Table_List 資料表");
+            System.out.println("0. 離開程式");
+            System.out.print("請輸入選項（0-2）：");
 
-                if (result == JFileChooser.APPROVE_OPTION) {
-                    File selectedFile = fileChooser.getSelectedFile();
-                    String inputPath = selectedFile.getAbsolutePath();
-                    System.out.println("📂 選擇的檔案：" + inputPath);
-                    importFromCSV(inputPath);
-                } else {
-                    System.out.println("⚠ 已取消選擇檔案，未執行匯入。");
+            String input = scanner.nextLine().trim();
+            System.out.println();
+
+            try {
+                switch (input) {
+                    case "1":
+                        String outputPath = generateTimestampedFilename();
+                        System.out.println("⏳ 自動產生 .csv 檔名： " + outputPath);
+                        exportToCSV(outputPath);
+                        break;
+                    case "2":
+                        JFileChooser fileChooser = new JFileChooser();
+                        fileChooser.setDialogTitle("請選擇要匯入的 .csv 檔案");
+                        fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
+                        fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV 檔案 (*.csv)", "csv"));
+
+                        int result = fileChooser.showOpenDialog(null);
+
+                        if (result == JFileChooser.APPROVE_OPTION) {
+                            File selectedFile = fileChooser.getSelectedFile();
+                            String inputPath = selectedFile.getAbsolutePath();
+                            System.out.println("📂 選擇的檔案：" + inputPath);
+                            importFromCSV(inputPath);
+                        } else {
+                            System.err.println("⚠ 已取消選擇檔案，未執行匯入。");
+                        }
+                        break;
+                    case "0":
+                        System.out.println("👋 程式結束，Bye！");
+                        return; // 離開主程式
+                    default:
+                        System.out.println("⚠ 無效的輸入，請重新選擇 0、1 或 2。");
+                        System.out.println();
+                        continue;
                 }
+            } catch (FileNotFoundException fnfe) {
+                System.err.println("❌ 找不到指定的檔案或路徑錯誤：" + fnfe.getMessage());
+            } catch (IOException ioe) {
+                System.err.println("❌ IO 錯誤（可能是檔案權限、磁碟錯誤）：" + ioe.getMessage());
+            } catch (SQLException sqle) {
+                System.err.println("❌ 資料庫錯誤：" + sqle.getMessage());
+            } catch (Exception e) {
+                System.err.println("❌ 未知錯誤：" + e.getMessage());
+                e.printStackTrace();
             }
-        } catch (FileNotFoundException fnfe) {
-            System.err.println("❌ 找不到指定的檔案或路徑錯誤：" + fnfe.getMessage());
-        } catch (IOException ioe) {
-            System.err.println("❌ IO 錯誤（可能是檔案權限、磁碟錯誤）：" + ioe.getMessage());
-        } catch (SQLException sqle) {
-            System.err.println("❌ 資料庫錯誤：" + sqle.getMessage());
-        } catch (Exception e) {
-            System.err.println("❌ 未知錯誤：" + e.getMessage());
-            e.printStackTrace();
+
+            System.out.println(); // 換行，美觀
         }
     }
 
@@ -129,7 +150,8 @@ public class TableMetaDataCSVHandler {
                             escapeCsv(tableName),
                             escapeCsv(tableDesc));
                 }
-                System.out.println("✅ 匯出完成：" + csvPath);
+                File file = new File(csvPath);
+                System.out.println("✅ .csv 匯出完成 (絕對路徑)：" + file.getAbsolutePath());
             }
         }
     }
@@ -189,7 +211,6 @@ public class TableMetaDataCSVHandler {
                         continue;
                     } // 跳過標題行
 
-//                    String[] parts = line.split(",", -1); // -1 保留空白欄位
 
                     // 偵測問題行
                     if (row.length < 4) {
