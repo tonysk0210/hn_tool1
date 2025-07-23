@@ -1,16 +1,26 @@
-package org.example;
+package org.config;
 
 import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.Properties;
+import java.io.File;
 
 public class ConfigLoader {
     private static final Properties props = new Properties();
 
     static {
         String configPath = System.getProperty("config.path");
+
         if (configPath == null) {
-            throw new RuntimeException("❌ 請使用 -Dconfig.path=路徑 設定資料庫設定檔");
+            if (new File("./config/config.properties").exists()) {
+                configPath = "./config/config.properties";
+//                System.out.println("⚠️ 未指定 config.path，預設使用：" + configPath);
+            } else if (new File("config.properties").exists()) {
+                configPath = "config.properties";
+//                System.out.println("⚠️ 未指定 config.path，預設使用：" + configPath);
+            } else {
+                throw new RuntimeException("❌ 找不到資料庫資料,請確認後重新輸入");
+            }
         }
 
         try (InputStream in = new FileInputStream(configPath)) {

@@ -11,12 +11,14 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+import org.config.ConfigLoader;
+import org.config.DbConfig;
 
 public class TableMetaDataCSVHandler {
 
-    private static final String JDBC_URL = ConfigLoader.get("jdbc.url");
-    private static final String USER = ConfigLoader.get("jdbc.user");
-    private static final String PASSWORD = ConfigLoader.get("jdbc.password");
+//    private static final String JDBC_URL = ConfigLoader.get("jdbc.url");
+//    private static final String USER = ConfigLoader.get("jdbc.user");
+//    private static final String PASSWORD = ConfigLoader.get("jdbc.password");
 
     //以timestamp自動產出.CSV檔名
     private static String generateTimestampedFilename() {
@@ -30,7 +32,7 @@ public class TableMetaDataCSVHandler {
 
         while (true) {
 
-            System.out.println("==== MENU ====");
+            System.out.println("====== 功能選單 ======");
             System.out.println("1. 匯出 .csv 供人工修改");
             System.out.println("2. 將修改後 .csv 寫入 HN_Table_List 資料表");
             System.out.println("0. 離開程式");
@@ -124,7 +126,10 @@ public class TableMetaDataCSVHandler {
                 ORDER BY t.name
                 """;
 
-        try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
+        try (Connection conn = DriverManager.getConnection(
+                DbConfig.getJdbcUrl(),
+                DbConfig.username,
+                DbConfig.password);
              Statement stmt = conn.createStatement();
              ResultSet resultSet = stmt.executeQuery(query);
              FileOutputStream fos = new FileOutputStream(csvPath);
@@ -185,7 +190,10 @@ public class TableMetaDataCSVHandler {
      * @throws SQLException          如果資料庫操作發生錯誤
      */
     private static void importFromCSV(String csvPath) throws Exception {
-        try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
+        try (Connection conn = DriverManager.getConnection(
+                DbConfig.getJdbcUrl(),
+                DbConfig.username,
+                DbConfig.password);
              CSVReader csvReader = new CSVReader(new InputStreamReader(new FileInputStream(csvPath), "UTF-8"))) {
 
             conn.setAutoCommit(false);
