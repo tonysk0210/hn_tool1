@@ -9,10 +9,13 @@
 
 ::pause
 
-
 @echo off
 chcp 65001 > nul
 
+:: 設定 JDK 路徑與執行檔
+set JAVA_EXE=.\jdk-custom\bin\java.exe
+
+:: 設定設定檔與執行 JAR
 set CONFIG=config.properties
 set JAR=target\DatabaseExporterMerge-1.0-SNAPSHOT.jar
 
@@ -31,7 +34,8 @@ if not exist "%CONFIG%" (
 )
 
 echo ✅ 啟動工具中...
-java -Dconfig.path=%CONFIG% -jar %JAR%
+"%JAVA_EXE%" -Dconfig.path=%CONFIG% -jar %JAR%
 
 echo.
 pause
+
