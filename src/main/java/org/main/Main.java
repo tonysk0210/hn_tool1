@@ -7,44 +7,51 @@ import org.config.ConfigLoader;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.SQLException;
 import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("請輸入資料庫連線資訊：");
+        Connection conn = null;
 
-        System.out.print("Host（預設: " + ConfigLoader.get("db.host") + "）：");
-        String host = scanner.nextLine().trim();
-        DbConfig.host = host.isEmpty() ? ConfigLoader.get("db.host") : host;
+        while (conn == null) {
 
-        System.out.print("Database Name（預設: " + ConfigLoader.get("db.name") + "）：");
-        String dbName = scanner.nextLine().trim();
-        DbConfig.databaseName = dbName.isEmpty() ? ConfigLoader.get("db.name") : dbName;
+            System.out.println("請輸入資料庫連線資訊：");
 
-        System.out.print("Username（預設: " + ConfigLoader.get("db.user") + "）：");
-        String user = scanner.nextLine().trim();
-        DbConfig.username = user.isEmpty() ? ConfigLoader.get("db.user") : user;
+            System.out.print("Host（預設: " + ConfigLoader.get("db.host") + "）：");
+            String host = scanner.nextLine().trim();
+            DbConfig.host = host.isEmpty() ? ConfigLoader.get("db.host") : host;
 
-        System.out.print("Password（可留空使用預設）：");
-        String pwd = scanner.nextLine().trim();
-        DbConfig.password = pwd.isEmpty() ? ConfigLoader.get("db.password") : pwd;
+            System.out.print("Database Name（預設: " + ConfigLoader.get("db.name") + "）：");
+            String dbName = scanner.nextLine().trim();
+            DbConfig.databaseName = dbName.isEmpty() ? ConfigLoader.get("db.name") : dbName;
 
-        System.out.println("\n🧪 連線參數確認");
-        System.out.println("Host          : " + DbConfig.host);
-        System.out.println("Database Name : " + DbConfig.databaseName);
-        System.out.println("Username      : " + DbConfig.username);
-        System.out.println("Password      : " + (DbConfig.password.isEmpty() ? "(空)" : "(已輸入)"));
-        System.out.println("JDBC URL      : " + DbConfig.getJdbcUrl());
+            System.out.print("Username（預設: " + ConfigLoader.get("db.user") + "）：");
+            String user = scanner.nextLine().trim();
+            DbConfig.username = user.isEmpty() ? ConfigLoader.get("db.user") : user;
 
-        //  連線
-        try (Connection conn = DriverManager.getConnection(DbConfig.getJdbcUrl(), DbConfig.username, DbConfig.password)) {
-            System.out.println("✅ 資料庫連線成功！");
-        } catch (Exception e) {
-            System.out.println("❌ 資料庫連線失敗！請確認輸入資訊是否正確");
-            e.printStackTrace();
-            return;
+            System.out.print("Password（可留空使用預設）：");
+            String pwd = scanner.nextLine().trim();
+            DbConfig.password = pwd.isEmpty() ? ConfigLoader.get("db.password") : pwd;
+
+            System.out.println("\n🧪 連線參數確認");
+            System.out.println("Host          : " + DbConfig.host);
+            System.out.println("Database Name : " + DbConfig.databaseName);
+            System.out.println("Username      : " + DbConfig.username);
+            System.out.println("Password      : " + (DbConfig.password.isEmpty() ? "(空)" : "(已輸入)"));
+            System.out.println("JDBC URL      : " + DbConfig.getJdbcUrl());
+
+            //  連線
+            try {
+                conn = DriverManager.getConnection(DbConfig.getJdbcUrl(), DbConfig.username, DbConfig.password);
+                System.out.println("✅ 資料庫連線成功！");
+            } catch (SQLException e) {
+                System.out.println("❌ 資料庫連線失敗，請重新輸入！");
+                System.out.println("➡️ 錯誤訊息：" + e.getMessage());
+                System.out.println("─────────────────────────────");
+            }
         }
 
         while (true) {
@@ -64,7 +71,6 @@ public class Main {
                     App.main(null); // Schema 匯出主程式
                     break;
                 case "0":
-                    System.out.println("👋 感謝使用，再見！");
                     return;
                 default:
                     System.out.println("⚠️ 無效選項，請重新輸入 0～2。");

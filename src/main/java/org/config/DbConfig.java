@@ -7,6 +7,6 @@ public class DbConfig {
     public static String password;
 
     public static String getJdbcUrl() {
-        return "jdbc:sqlserver://" + host + ":1433;databaseName=" + databaseName + ";encrypt=true;trustServerCertificate=true;";
+        return "jdbc:sqlserver://" + host + ":1433;databaseName=" + databaseName + ";encrypt=true;trustServerCertificate=true;loginTimeout=5;";
     }
 }

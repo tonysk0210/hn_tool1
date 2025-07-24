@@ -35,11 +35,10 @@ public class TableMetaDataCSVHandler {
             System.out.println("====== 功能選單 ======");
             System.out.println("1. 匯出 .csv 供人工修改");
             System.out.println("2. 將修改後 .csv 寫入 HN_Table_List 資料表");
-            System.out.println("0. 離開程式");
+            System.out.println("0. 回主選單");
             System.out.print("請輸入選項（0-2）：");
 
             String input = scanner.nextLine().trim();
-            System.out.println();
 
             try {
                 switch (input) {
@@ -50,6 +49,7 @@ public class TableMetaDataCSVHandler {
                         break;
                     case "2":
                         JFileChooser fileChooser = new JFileChooser();
+                        System.out.println("📂 請選擇要匯入的 .csv 檔案");
                         fileChooser.setDialogTitle("請選擇要匯入的 .csv 檔案");
                         fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
                         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV 檔案 (*.csv)", "csv"));
@@ -59,17 +59,17 @@ public class TableMetaDataCSVHandler {
                         if (result == JFileChooser.APPROVE_OPTION) {
                             File selectedFile = fileChooser.getSelectedFile();
                             String inputPath = selectedFile.getAbsolutePath();
-                            System.out.println("📂 選擇的檔案：" + inputPath);
+                            System.out.println("\uD83D\uDCC4 選擇的檔案：" + inputPath);
                             importFromCSV(inputPath);
                         } else {
-                            System.err.println("⚠ 已取消選擇檔案，未執行匯入。");
+                            System.out.println("⚠\uFE0F 已取消選擇檔案，未執行匯入。");
+                            System.out.println();
                         }
                         break;
                     case "0":
-                        System.out.println("👋 程式結束，Bye！");
                         return; // 離開主程式
                     default:
-                        System.out.println("⚠ 無效的輸入，請重新選擇 0、1 或 2。");
+                        System.out.println("⚠\uFE0F 無效的輸入，請重新選擇 0、1 或 2。");
                         System.out.println();
                         continue;
                 }
@@ -84,7 +84,6 @@ public class TableMetaDataCSVHandler {
                 e.printStackTrace();
             }
 
-            System.out.println(); // 換行，美觀
         }
     }
 
@@ -157,6 +156,7 @@ public class TableMetaDataCSVHandler {
                 }
                 File file = new File(csvPath);
                 System.out.println("✅ .csv 匯出完成 (絕對路徑)：" + file.getAbsolutePath());
+                System.out.println();
             }
         }
     }
@@ -222,7 +222,7 @@ public class TableMetaDataCSVHandler {
 
                     // 偵測問題行
                     if (row.length < 4) {
-                        System.err.printf("⚠ 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, String.join(",", row));
+                        System.err.printf("⚠\uFE0F 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                         continue;
                     }
@@ -242,7 +242,7 @@ public class TableMetaDataCSVHandler {
                         pstmt.addBatch();
                         successCount++;
                     } catch (NumberFormatException nfe) {
-                        System.err.printf("⚠ 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, String.join(",", row));
+                        System.err.printf("⚠\uFE0F 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                     }
                 }
@@ -252,11 +252,12 @@ public class TableMetaDataCSVHandler {
                     System.out.printf("✅ 匯入成功，總筆數：%d%n", successCount);
                 } else {
                     conn.rollback();
-                    System.err.printf("❌ 匯入失敗，偵測到 %d 筆錯誤，已取消所有變更。%n", failCount);
+                    System.out.printf("❌ 匯入失敗，偵測到 %d 筆錯誤，已取消所有變更。%n", failCount);
                 }
+                System.out.println();
             } catch (CsvValidationException e) {
                 conn.rollback();
-                throw new IOException("CSV 格式解析錯誤", e);
+                throw new IOException("⚠\uFE0F CSV 格式解析錯誤", e);
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
