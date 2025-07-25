@@ -7,9 +7,6 @@ public class DbConfig {
     public static String password;
     public static boolean integratedSecurity;
 
-    //    public static String getJdbcUrl() {
-//        return "jdbc:sqlserver://" + host + ":1433;databaseName=" + databaseName + ";encrypt=true;trustServerCertificate=true;loginTimeout=5;";
-//    }
     public static void loadFromConfig() {
         host = ConfigLoader.get("db.host");
         databaseName = ConfigLoader.get("db.name");
@@ -20,7 +17,7 @@ public class DbConfig {
 
     public static String getJdbcUrl() {
         if (integratedSecurity) {
-            return "jdbc:sqlserver://" + host + ";databaseName=" + databaseName + ";integratedSecurity=true;";
+            return "jdbc:sqlserver://" + host + ";databaseName=" + databaseName + ";integratedSecurity=true;"; // 回傳MS驗證
         }
         return "jdbc:sqlserver://" + host + ":1433;databaseName=" + databaseName + ";encrypt=true;trustServerCertificate=true;loginTimeout=5;";
     }

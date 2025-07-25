@@ -17,10 +17,6 @@ import org.config.DbConfig;
 
 public class TableMetaDataCSVHandler {
 
-//    private static final String JDBC_URL = ConfigLoader.get("jdbc.url");
-//    private static final String USER = ConfigLoader.get("jdbc.user");
-//    private static final String PASSWORD = ConfigLoader.get("jdbc.password");
-
     //以timestamp自動產出.CSV檔名
     private static String generateTimestampedFilename() {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd_HHmmss");
