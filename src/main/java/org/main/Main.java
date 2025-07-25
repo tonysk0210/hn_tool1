@@ -12,8 +12,34 @@ import java.util.Scanner;
 
 public class Main {
     public static void main(String[] args) {
+
         Scanner scanner = new Scanner(System.in);
 
+        // 1. 載入設定檔選擇
+        System.out.println("請選擇要使用的資料庫連線設定檔：");
+        System.out.println("1. 一般連線（config.properties）");
+        System.out.println("2. MS驗證連線（config-msv.properties）");
+        System.out.print("請輸入選項（1 或 2）：");
+
+        String choice = scanner.nextLine().trim();
+        String configFile;
+
+        switch (choice) {
+            case "1":
+                configFile = "config.properties";
+                break;
+            case "2":
+                configFile = "config-msv.properties";
+                break;
+            default:
+                System.out.println("⚠ 輸入錯誤，預設使用 config.properties");
+                configFile = "config.properties";
+        }
+
+        ConfigLoader.load(configFile);
+        DbConfig.loadFromConfig();
+
+        //------------
         Connection conn = null;
 
         while (conn == null) {
@@ -39,7 +65,7 @@ public class Main {
             System.out.println("\n🧪 連線參數確認");
             System.out.println("Host          : " + DbConfig.host);
             System.out.println("Database Name : " + DbConfig.databaseName);
-            System.out.println("Username      : " + DbConfig.username);
+            System.out.println("Username      : " + (DbConfig.password.isEmpty() ? "(空)" : DbConfig.username));
             System.out.println("Password      : " + (DbConfig.password.isEmpty() ? "(空)" : "(已輸入)"));
             System.out.println("JDBC URL      : " + DbConfig.getJdbcUrl());
 

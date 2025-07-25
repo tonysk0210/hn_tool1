@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
+
 import org.config.ConfigLoader;
 import org.config.DbConfig;
 
@@ -107,23 +108,22 @@ public class TableMetaDataCSVHandler {
      * @throws Exception    其他未預期的例外狀況
      */
     private static void exportToCSV(String csvPath) throws Exception {
-        String query = """
-                SELECT ISNULL(f.value, '') AS System_Name,
-                       ROW_NUMBER() OVER (PARTITION BY f.value ORDER BY f.value, t.name) AS Seq,
-                       t.name AS Table_Name,
-                       ISNULL(e.value, '') AS Table_Desc
-                FROM sys.tables t
-                LEFT JOIN (
-                    SELECT major_id, name, value FROM sys.extended_properties
-                    WHERE name = '用途說明'
-                ) e ON t.object_id = e.major_id
-                LEFT JOIN (
-                    SELECT major_id, name, value FROM sys.extended_properties
-                    WHERE name = '模組別'
-                ) f ON t.object_id = f.major_id
-                WHERE ISNULL(f.value, '') <> 'HN_Tools' -- ❗ 根據模組別排除
-                ORDER BY t.name
-                """;
+        String query = "SELECT ISNULL(f.value, '') AS System_Name, " +
+                "       ROW_NUMBER() OVER (PARTITION BY f.value ORDER BY f.value, t.name) AS Seq, " +
+                "       t.name AS Table_Name, " +
+                "       ISNULL(e.value, '') AS Table_Desc " +
+                "FROM sys.tables t " +
+                "LEFT JOIN ( " +
+                "    SELECT major_id, name, value FROM sys.extended_properties " +
+                "    WHERE name = '用途說明' " +
+                ") e ON t.object_id = e.major_id " +
+                "LEFT JOIN ( " +
+                "    SELECT major_id, name, value FROM sys.extended_properties " +
+                "    WHERE name = '模組別' " +
+                ") f ON t.object_id = f.major_id " +
+                "WHERE ISNULL(f.value, '') <> 'HN_Tools' " + // ❗ 根據模組別排除
+                "ORDER BY t.name";
+        ;
 
         try (Connection conn = DriverManager.getConnection(
                 DbConfig.getJdbcUrl(),
@@ -273,18 +273,16 @@ public class TableMetaDataCSVHandler {
      * @throws SQLException 若建立資料表或執行 SQL 時發生錯誤
      */
     private static void createTableIfNotExists(Connection conn) throws SQLException {
-        String sql = """
-                    IF NOT EXISTS (
-                        SELECT * FROM INFORMATION_SCHEMA.TABLES 
-                        WHERE TABLE_NAME = 'HN_Table_List'
-                    )
-                    CREATE TABLE HN_Table_List (
-                        System_Name NVARCHAR(100),
-                        Seq INT,
-                        Table_Name NVARCHAR(100),
-                        Table_Desc NVARCHAR(500)
-                    )
-                """;
+        String sql = "IF NOT EXISTS ( " +
+                "    SELECT * FROM INFORMATION_SCHEMA.TABLES " +
+                "    WHERE TABLE_NAME = 'HN_Table_List' " +
+                ") " +
+                "CREATE TABLE HN_Table_List ( " +
+                "    System_Name NVARCHAR(100), " +
+                "    Seq INT, " +
+                "    Table_Name NVARCHAR(100), " +
+                "    Table_Desc NVARCHAR(500) " +
+                ")";
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         }

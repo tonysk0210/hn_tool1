@@ -12,39 +12,36 @@ public class SchemaPdfExporter {
     private static final String META_TABLE_NAME = "dbo.HN_Table_List";
 
     public static void exportSchemaToPdf(Connection conn, String fullFilePath) throws Exception {
-        String sql = """
-                SELECT
-                t.name AS 表格名稱,
-                ep2.value as 用途說明 ,
-                ep3.value as 模組別 ,
-                ROW_NUMBER() OVER (PARTITION BY t.name ORDER BY c.column_id) AS 序號,
-                c.name AS 欄位,
-                typ.name AS 資料型態,
-                c.max_length AS 長度,
-                CASE WHEN c.is_nullable = 0 THEN 'V' ELSE '' END AS [not null],
-                CASE
-                WHEN i.is_primary_key = 1 THEN 'PKEY'
-                WHEN i.is_unique = 1 THEN 'UNIKEY'
-                ELSE ''
-                END AS [Index],
-                dc.definition AS [Default],
-                ep.value AS 描述
-                FROM
-                sys.columns c
-                JOIN sys.tables t ON c.object_id = t.object_id
-                JOIN sys.types typ ON c.user_type_id = typ.user_type_id
-                LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id
-                LEFT JOIN sys.extended_properties ep
-                  ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.name = 'MS_Description'
-                LEFT JOIN sys.extended_properties ep2
-                  ON c.object_id = ep2.major_id AND ep2.name = '用途說明'
-                LEFT JOIN sys.extended_properties ep3
-                  ON c.object_id = ep3.major_id AND ep3.name = '模組別'
-                LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id
-                LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id
-                WHERE t.is_ms_shipped = 0
-                ORDER BY t.name, c.column_id;
-                """;
+        String sql = "SELECT " +
+                "t.name AS 表格名稱, " +
+                "ep2.value AS 用途說明, " +
+                "ep3.value AS 模組別, " +
+                "ROW_NUMBER() OVER (PARTITION BY t.name ORDER BY c.column_id) AS 序號, " +
+                "c.name AS 欄位, " +
+                "typ.name AS 資料型態, " +
+                "c.max_length AS 長度, " +
+                "CASE WHEN c.is_nullable = 0 THEN 'V' ELSE '' END AS [not null], " +
+                "CASE " +
+                "    WHEN i.is_primary_key = 1 THEN 'PKEY' " +
+                "    WHEN i.is_unique = 1 THEN 'UNIKEY' " +
+                "    ELSE '' " +
+                "END AS [Index], " +
+                "dc.definition AS [Default], " +
+                "ep.value AS 描述 " +
+                "FROM sys.columns c " +
+                "JOIN sys.tables t ON c.object_id = t.object_id " +
+                "JOIN sys.types typ ON c.user_type_id = typ.user_type_id " +
+                "LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id " +
+                "LEFT JOIN sys.extended_properties ep " +
+                "  ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.name = 'MS_Description' " +
+                "LEFT JOIN sys.extended_properties ep2 " +
+                "  ON c.object_id = ep2.major_id AND ep2.name = '用途說明' " +
+                "LEFT JOIN sys.extended_properties ep3 " +
+                "  ON c.object_id = ep3.major_id AND ep3.name = '模組別' " +
+                "LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id " +
+                "LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id " +
+                "WHERE t.is_ms_shipped = 0 " +
+                "ORDER BY t.name, c.column_id;";
 
         //中文設定(微軟正黑體)
         BaseFont bf = BaseFont.createFont("C:/Windows/Fonts/msjh.ttc,0", BaseFont.IDENTITY_H, BaseFont.EMBEDDED);
@@ -200,13 +197,11 @@ public class SchemaPdfExporter {
             Set<String> processedTables,
             String metadataTableFullName) throws SQLException {
 
-        String sql = String.format("""
-            SELECT t.Table_Name, t.Table_Desc, t.System_Name, ep3.value AS 模組別
-            FROM %s t
-            LEFT JOIN sys.tables st ON t.Table_Name = st.name
-            LEFT JOIN sys.extended_properties ep3
-              ON st.object_id = ep3.major_id AND ep3.name = '模組別'
-            """, metadataTableFullName);
+        String sql = String.format("SELECT t.Table_Name, t.Table_Desc, t.System_Name, ep3.value AS 模組別 " +
+                "FROM %s t " +
+                "LEFT JOIN sys.tables st ON t.Table_Name = st.name " +
+                "LEFT JOIN sys.extended_properties ep3 " +
+                "  ON st.object_id = ep3.major_id AND ep3.name = '模組別'", metadataTableFullName);
 
         try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
             java.util.List<String> noTableButModule = new ArrayList<>();
