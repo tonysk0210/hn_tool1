@@ -1,6 +1,7 @@
 package org.schemaexporter;
 
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 
 import java.io.FileOutputStream;
@@ -12,71 +13,73 @@ import java.util.*;
 
 public class SchemaExcelExporter {
 
-    private static final String META_TABLE_NAME = "dbo.HN_Table_List";
-
     public static void exportSchemaToExcel(Connection conn, String outputDirPath) throws Exception {
-        String sql = "SELECT " +
-                "t.name AS 表格名稱, " +
-                "ep2.value as 用途說明, " +
-                "ep3.value as 模組別, " +
-                "ROW_NUMBER() OVER (PARTITION BY t.name ORDER BY c.column_id) AS 序號, " +
-                "c.name AS 欄位, " +
-                "typ.name AS 資料型態, " +
-                "c.max_length AS 長度, " +
-                "CASE WHEN c.is_nullable = 0 THEN 'V' ELSE '' END AS [not null], " +
-                "CASE " +
-                "    WHEN i.is_primary_key = 1 THEN 'PKEY' " +
-                "    WHEN i.is_unique = 1 THEN 'UNIKEY' " +
-                "    ELSE '' " +
-                "END AS [Index], " +
-                "dc.definition AS [Default], " +
-                "ep.value AS 描述 " +
-                "FROM sys.columns c " +
-                "JOIN sys.tables t ON c.object_id = t.object_id " +
-                "JOIN sys.types typ ON c.user_type_id = typ.user_type_id " +
-                "LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id " +
-                "LEFT JOIN sys.extended_properties ep " +
-                "  ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.name = 'MS_Description' " +
-                "LEFT JOIN sys.extended_properties ep2 " +
-                "  ON c.object_id = ep2.major_id AND ep2.name = '用途說明' " +
-                "LEFT JOIN sys.extended_properties ep3 " +
-                "  ON c.object_id = ep3.major_id AND ep3.name = '模組別' " +
-                "LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id " +
-                "LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id " +
-                "WHERE t.is_ms_shipped = 0 " +
-                "ORDER BY t.name, c.column_id;";
+        String sql =
+                "SELECT b.*, a.Table_Name,\n" +
+                        "    CASE WHEN ISNULL(b.模組別, '') = '' THEN 0 ELSE 1 END AS 模組別有值,\n" +
+                        "    CASE WHEN b.表格名稱 IS NULL THEN 0 ELSE 1 END AS 表格是否存在,\n" +
+                        "    CASE WHEN ISNULL(b.描述, '') = '' THEN 0 ELSE 1 END AS 描述有值\n" +
+                        "FROM HN_Table_List a\n" +
+                        "LEFT JOIN (\n" +
+                        "    SELECT t.name AS 表格名稱,\n" +
+                        "        ep2.value AS 用途說明,\n" +
+                        "        ep3.value AS 模組別,\n" +
+                        "        ROW_NUMBER() OVER (PARTITION BY t.name ORDER BY c.column_id) AS 序號,\n" +
+                        "        c.name AS 欄位,\n" +
+                        "        typ.name AS 資料型態,\n" +
+                        "        c.max_length AS 長度,\n" +
+                        "        CASE WHEN c.is_nullable = 0 THEN 'V' ELSE '' END AS [not null],\n" +
+                        "        CASE WHEN i.is_primary_key = 1 THEN 'PKEY'\n" +
+                        "             WHEN i.is_unique = 1 THEN 'UNIKEY'\n" +
+                        "             ELSE '' END AS [Index],\n" +
+                        "        dc.definition AS [Default],\n" +
+                        "        ep.value AS 描述\n" +
+                        "    FROM sys.columns c\n" +
+                        "    JOIN sys.tables t ON c.object_id = t.object_id\n" +
+                        "    JOIN sys.types typ ON c.user_type_id = typ.user_type_id\n" +
+                        "    LEFT JOIN sys.default_constraints dc ON c.default_object_id = dc.object_id\n" +
+                        "    LEFT JOIN sys.extended_properties ep ON c.object_id = ep.major_id AND c.column_id = ep.minor_id AND ep.name = 'MS_Description'\n" +
+                        "    LEFT JOIN sys.extended_properties ep2 ON c.object_id = ep2.major_id AND ep2.minor_id = 0 AND ep2.name = '用途說明'\n" +
+                        "    LEFT JOIN sys.extended_properties ep3 ON c.object_id = ep3.major_id AND ep3.minor_id = 0 AND ep3.name = '模組別'\n" +
+                        "    LEFT JOIN sys.index_columns ic ON c.object_id = ic.object_id AND c.column_id = ic.column_id\n" +
+                        "    LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id\n" +
+                        "    WHERE t.is_ms_shipped = 0 AND t.name NOT IN ('sysdiagrams')\n" +
+                        ") b ON a.Table_Name = b.表格名稱\n" +
+                        "ORDER BY b.模組別, b.表格名稱, b.序號;";
+
 
         Statement stmt = conn.createStatement();
         ResultSet rs = stmt.executeQuery(sql);
 
-        //模組->資料表->欄位
-        Map<String, Map<String, List<List<String>>>> moduleTableMap = new LinkedHashMap<>();//模組別
-        Map<String, String> tableUsageMap = new HashMap<>();//紀錄用途說明
-        Set<String> processedTables = new HashSet<>();//用途
-        List<String> hasTableButNoModule = new ArrayList<>();//有表無模組
-        Set<String> seenNoModule = new HashSet<>();//防止重複
+        Map<String, Map<String, List<List<String>>>> moduleTableMap = new LinkedHashMap<>();
+        Map<String, String> tableUsageMap = new HashMap<>();
+        List<String[]> missingDescriptions = new ArrayList<>();
+        Set<String> processedTables = new HashSet<>();
 
         while (rs.next()) {
-            String tableName = rs.getString("表格名稱");
+            String table = rs.getString("表格名稱");
             String module = rs.getString("模組別");
             String usage = rs.getString("用途說明") != null ? rs.getString("用途說明") : "";
+            String tableName = rs.getString("Table_Name");
 
-            if (module == null || module.isBlank()) {
-                if (!seenNoModule.contains(tableName)) {
-                    hasTableButNoModule.add(String.format("⚠️ 資料表:[%s] --> 模組別不存在", tableName));
-                    seenNoModule.add(tableName);
-                }
+            if (rs.getInt("模組別有值") == 0) {
+                System.out.printf("⚠️ 資料表: [%s] --> 模組別不存在%n", tableName);
                 continue;
             }
 
-            processedTables.add(tableName);
+            if (rs.getInt("表格是否存在") == 0) {
+                System.out.printf("⚠️ 模組別: [%s]，資料表: [%s] --> 資料表不存在%n", module, tableName);
+                continue;
+            }
+
+            processedTables.add(table);
             moduleTableMap.putIfAbsent(module, new LinkedHashMap<>());
             Map<String, List<List<String>>> tableMap = moduleTableMap.get(module);
-            tableMap.putIfAbsent(tableName, new ArrayList<>());
-            tableUsageMap.putIfAbsent(tableName, usage);
+            tableMap.putIfAbsent(table, new ArrayList<>());
+            tableUsageMap.putIfAbsent(table, usage);
 
             List<String> row = new ArrayList<>();
-            row.add(String.valueOf(rs.getInt("序號")));
+            row.add(rs.getString("序號"));
             row.add(rs.getString("欄位"));
             row.add(rs.getString("資料型態"));
             row.add(String.valueOf(rs.getInt("長度")));
@@ -85,60 +88,43 @@ public class SchemaExcelExporter {
             row.add(rs.getString("Default"));
             row.add(rs.getString("描述"));
 
-            tableMap.get(tableName).add(row);
+            if (rs.getInt("描述有值") == 0) {
+                missingDescriptions.add(new String[]{module, tableName, rs.getString("欄位")});
+            }
+
+            tableMap.get(table).add(row);
         }
 
-        //每個模組產生一份EXCEL
+        if (!moduleTableMap.isEmpty()) {
+            System.out.println(); // 加這一行，錯誤訊息與成功訊息之間空一行
+        }
         for (String module : moduleTableMap.keySet()) {
             Workbook workbook = new XSSFWorkbook();
-
-            //欄位樣式
-            CellStyle headerStyle = workbook.createCellStyle();
-            Font headerFont = workbook.createFont();
-            headerFont.setBold(true);
-            headerStyle.setFont(headerFont);
-            headerStyle.setBorderTop(BorderStyle.THIN);
-            headerStyle.setBorderBottom(BorderStyle.THIN);
-            headerStyle.setBorderLeft(BorderStyle.THIN);
-            headerStyle.setBorderRight(BorderStyle.THIN);
-
-            CellStyle cellStyle = workbook.createCellStyle();
-            cellStyle.setWrapText(true);
-            cellStyle.setBorderTop(BorderStyle.THIN);
-            cellStyle.setBorderBottom(BorderStyle.THIN);
-            cellStyle.setBorderLeft(BorderStyle.THIN);
-            cellStyle.setBorderRight(BorderStyle.THIN);
-
-            CellStyle titleStyle = workbook.createCellStyle();
-            Font titleFont = workbook.createFont();
-            titleFont.setBold(true);
-            titleStyle.setFont(titleFont);
-            titleStyle.setAlignment(HorizontalAlignment.CENTER);
-            titleStyle.setVerticalAlignment(VerticalAlignment.CENTER);
-            titleStyle.setBorderTop(BorderStyle.THIN);
-            titleStyle.setBorderBottom(BorderStyle.THIN);
-            titleStyle.setBorderLeft(BorderStyle.THIN);
-            titleStyle.setBorderRight(BorderStyle.THIN);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            CellStyle leftHeaderStyle = createLeftHeaderStyle(workbook);
+            CellStyle cellStyle = createBorderedStyle(workbook, false);
+            CellStyle titleStyle = createHeaderStyle(workbook);
+            CellStyle descriptionStyle = createDescriptionStyle(workbook);
 
             Map<String, List<List<String>>> tableMap = moduleTableMap.get(module);
 
-            //模組明細表
-            Sheet listSheet = workbook.createSheet("模組明細表");
+            Sheet listSheet = workbook.createSheet("檔案清單");
             String[] listHeaders = {"系統別", "項次", "檔案英文", "檔案中文"};
-
-            Row headerRow = listSheet.createRow(0);
+            int[] listColumnWidths = {10, 8, 30, 35}; // 根據欄位內容調整寬度
+            for (int i = 0; i < listColumnWidths.length; i++) {
+                listSheet.setColumnWidth(i, listColumnWidths[i] * 256);
+            }
+            Row listHeaderRow = listSheet.createRow(0);
             for (int i = 0; i < listHeaders.length; i++) {
-                Cell cell = headerRow.createCell(i);
+                Cell cell = listHeaderRow.createCell(i);
                 cell.setCellValue(listHeaders[i]);
-                cell.setCellStyle(headerStyle);
+                cell.setCellStyle(leftHeaderStyle);
             }
 
             int rowIdx = 1;
             int index = 1;
-            for (Map.Entry<String, List<List<String>>> entry : tableMap.entrySet()) {
-                String tableName = entry.getKey();
+            for (String tableName : tableMap.keySet()) {
                 String usage = tableUsageMap.getOrDefault(tableName, "");
-
                 Row row = listSheet.createRow(rowIdx++);
                 String[] values = {module, String.valueOf(index++), tableName, usage};
                 for (int i = 0; i < values.length; i++) {
@@ -148,41 +134,49 @@ public class SchemaExcelExporter {
                 }
             }
 
-            for (int i = 0; i < listHeaders.length; i++) {
-                listSheet.setColumnWidth(i, 20 * 256);
-            }
-
             for (Map.Entry<String, List<List<String>>> entry : tableMap.entrySet()) {
                 String tableName = entry.getKey();
                 List<List<String>> rows = entry.getValue();
                 String usage = tableUsageMap.getOrDefault(tableName, "");
 
-                //資料表的欄位說明表
                 Sheet sheet = workbook.createSheet(tableName);
+                sheet.getPrintSetup().setPaperSize(PrintSetup.A4_PAPERSIZE); // 設定紙張為 A4
+                sheet.getPrintSetup().setLandscape(true); // 設定為橫向列印
+
+
                 Row infoRow = sheet.createRow(0);
 
-                //表名
-                Cell left = infoRow.createCell(0);
-                left.setCellValue(tableName);
-                left.setCellStyle(titleStyle);
-                sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 0, 3));
+// 表格名稱（0~3欄）
+                for (int i = 0; i <= 3; i++) {
+                    Cell cell = infoRow.createCell(i);
+                    cell.setCellStyle(titleStyle);
+                    if (i == 0) {
+                        cell.setCellValue(tableName);
+                    }
+                }
+                sheet.addMergedRegion(new CellRangeAddress(0, 0, 0, 3));
 
-                //用途說明
-                Cell right = infoRow.createCell(4);
-                right.setCellValue(usage);
-                right.setCellStyle(titleStyle);
-                sheet.addMergedRegion(new org.apache.poi.ss.util.CellRangeAddress(0, 0, 4, 7));
+// 用途說明（4~7欄）
+                for (int i = 4; i <= 7; i++) {
+                    Cell cell = infoRow.createCell(i);
+                    cell.setCellStyle(titleStyle);
+                    if (i == 4) {
+                        cell.setCellValue(usage);
+                    }
+                }
+                sheet.addMergedRegion(new CellRangeAddress(0, 0, 4, 7));
+
                 for (int i = 5; i <= 7; i++) {
-                    Cell dummy = infoRow.createCell(i);
-                    dummy.setCellStyle(titleStyle);
+                    infoRow.createCell(i).setCellStyle(titleStyle);
                 }
 
                 String[] headers = {"序號", "欄位", "資料型態", "長度", "not null", "Index", "Default", "描述"};
-                Row header = sheet.createRow(1);
+
+                Row headerRow = sheet.createRow(1);
                 for (int i = 0; i < headers.length; i++) {
-                    Cell cell = header.createCell(i);
+                    Cell cell = headerRow.createCell(i);
                     cell.setCellValue(headers[i]);
-                    cell.setCellStyle(headerStyle);
+                    cell.setCellStyle(leftHeaderStyle); // ⬅️ 使用靠左樣式
                 }
 
                 for (int r = 0; r < rows.size(); r++) {
@@ -191,11 +185,15 @@ public class SchemaExcelExporter {
                     for (int c = 0; c < data.size(); c++) {
                         Cell cell = row.createCell(c);
                         cell.setCellValue(data.get(c) != null ? data.get(c) : "");
-                        cell.setCellStyle(cellStyle);
+                        if (c == 7) {
+                            cell.setCellStyle(descriptionStyle);
+                        } else {
+                            cell.setCellStyle(cellStyle);
+                        }
                     }
                 }
 
-                int[] columnWidths = {6, 20, 15, 8, 10, 10, 15, 30};
+                int[] columnWidths = {6, 30, 25, 8, 12, 10, 14, 30};
                 for (int i = 0; i < headers.length; i++) {
                     sheet.setColumnWidth(i, columnWidths[i] * 256);
                 }
@@ -203,81 +201,118 @@ public class SchemaExcelExporter {
 
             String safeModuleName = module.replaceAll("[\\/:*?\"<>|]", "_");
             String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
-            //欄寬、儲存路徑與檔名
-            String fullPath = outputDirPath + File.separator + "Schema_" + safeModuleName + "_" + timestamp + ".xlsx";
+            String filePath = outputDirPath + File.separator + "Schema_" + safeModuleName + "_" + timestamp + ".xlsx";
 
-            try (FileOutputStream out = new FileOutputStream(fullPath)) {
+            try (FileOutputStream out = new FileOutputStream(filePath)) {
                 workbook.write(out);
             }
             workbook.close();
-            System.out.println("模組 " + module + " 的 Schema Excel 匯出成功：" + fullPath);
+            System.out.println("模組 " + module + " 的 Schema Excel 匯出成功：" + filePath);
         }
 
+        if (!missingDescriptions.isEmpty()) {
+            Workbook workbook = new XSSFWorkbook();
+            Sheet sheet = workbook.createSheet("缺描述欄位");
 
-        // 顯示錯誤提示
-        if (!hasTableButNoModule.isEmpty()) {
-            hasTableButNoModule.forEach(System.out::println);
-        }
+            CellStyle borderedStyle = workbook.createCellStyle();
+            borderedStyle.setBorderTop(BorderStyle.THIN);
+            borderedStyle.setBorderBottom(BorderStyle.THIN);
+            borderedStyle.setBorderLeft(BorderStyle.THIN);
+            borderedStyle.setBorderRight(BorderStyle.THIN);
+            borderedStyle.setAlignment(HorizontalAlignment.LEFT);
+            borderedStyle.setVerticalAlignment(VerticalAlignment.CENTER);
 
-        try {
-            findAndPrintTablesWithoutColumns(conn, processedTables, META_TABLE_NAME);
-        } catch (SQLException e) {
-            System.err.println("\n資料有誤,請重新確認後輸入");
-        }
-    }
+            Row header = sheet.createRow(0);
+            header.createCell(0).setCellValue("表格名稱");
+            header.createCell(1).setCellValue("欄位名稱");
+            header.getCell(0).setCellStyle(borderedStyle);
+            header.getCell(1).setCellStyle(borderedStyle);
 
-    public static void findAndPrintTablesWithoutColumns(
-            Connection conn,
-            Set<String> processedTables,
-            String metadataTableFullName
-    ) throws SQLException {
-
-        String sql = String.format("SELECT t.Table_Name, t.Table_Desc, t.System_Name, ep3.value AS 模組別 " +
-                "FROM %s t " +
-                "LEFT JOIN sys.tables st ON t.Table_Name = st.name " +
-                "LEFT JOIN sys.extended_properties ep3 " +
-                "  ON st.object_id = ep3.major_id AND ep3.name = '模組別'", metadataTableFullName);
-
-        try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
-            List<String> noTableButModule = new ArrayList<>();
-            List<String> noTableNoModule = new ArrayList<>();
-
-            while (rs.next()) {
-                String table = rs.getString("Table_Name");
-                String desc = rs.getString("Table_Desc");
-                String system = rs.getString("System_Name");
-                String module = rs.getString("模組別");
-
-                boolean hasSystem = system != null && !system.trim().isEmpty();
-                boolean inDatabase = processedTables.contains(table);
-
-                if (!inDatabase) {
-                    String msg = String.format(
-                            "⚠️ 模組別: [%s]，資料表: [%s]，描述: %s --> 資料表不存在",
-                            hasSystem ? system : "（無模組別）",
-                            table != null ? table : "（無表格名稱）",
-                            desc != null ? desc : "（無描述）"
-                    );
-
-                    if (hasSystem) {
-                        noTableButModule.add(msg);
-                    } else {
-                        noTableNoModule.add(msg);
-                    }
-                }
+            for (int i = 0; i < missingDescriptions.size(); i++) {
+                Row row = sheet.createRow(i + 1);
+                String[] item = missingDescriptions.get(i);
+                Cell cell1 = row.createCell(0);
+                Cell cell2 = row.createCell(1);
+                cell1.setCellValue(item[1]);
+                cell2.setCellValue(item[2]);
+                cell1.setCellStyle(borderedStyle);
+                cell2.setCellStyle(borderedStyle);
             }
 
-//            System.out.println("\n=== 錯誤資訊提示 ===");
-//            hasTableButNoModule.forEach(System.out::println);
-            noTableButModule.forEach(System.out::println);
-            noTableNoModule.forEach(System.out::println);
+            sheet.setColumnWidth(0, 25 * 256);
+            sheet.setColumnWidth(1, 25 * 256);
 
-            if (noTableButModule.isEmpty() && noTableNoModule.isEmpty()) {
-                System.out.println(" ✅ 所有表格皆成功處理且系統別資訊齊全。");
+            String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"));
+            String filePath = outputDirPath + File.separator + "Schema_缺少描述欄位資料_" + timestamp + ".xlsx";
+
+            try (FileOutputStream out = new FileOutputStream(filePath)) {
+                workbook.write(out);
             }
-
-
-            System.out.println("\n ✅ 已成功處理表格共 " + processedTables.size() + " 張：" + processedTables);
+            workbook.close();
+            System.out.println("⚠️ 缺少描述欄位已輸出：" + filePath);
         }
+
+        System.out.println("\n✅ 已成功處理表格共 " + processedTables.size() + " 張。\n");
     }
+
+    private static CellStyle createHeaderStyle(Workbook wb) {
+        CellStyle style = wb.createCellStyle();
+        Font font = wb.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 12); // 設定標題字體大小
+        font.setFontName("Microsoft JhengHei");
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.CENTER);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        return style;
+    }
+
+    private static CellStyle createBorderedStyle(Workbook wb, boolean bold) {
+        CellStyle style = wb.createCellStyle();
+        Font font = wb.createFont();
+        font.setBold(bold);
+        font.setFontHeightInPoints((short) 12); // 內容文字大小
+        font.setFontName("Microsoft JhengHei");
+        style.setFont(font);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        style.setAlignment(HorizontalAlignment.LEFT);
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        return style;
+    }
+
+    private static CellStyle createDescriptionStyle(Workbook wb) {
+        CellStyle style = createBorderedStyle(wb, false);
+        Font font = wb.createFont();
+        font.setFontHeightInPoints((short) 12); //自訂描述欄位字體大小
+        font.setFontName("Microsoft JhengHei");
+        style.setFont(font);
+        style.setWrapText(true);
+        style.setVerticalAlignment(VerticalAlignment.TOP);
+        return style;
+    }
+
+    private static CellStyle createLeftHeaderStyle(Workbook wb) {
+        CellStyle style = wb.createCellStyle();
+        Font font = wb.createFont();
+        font.setBold(true);
+        font.setFontHeightInPoints((short) 12); // 表頭字體大小
+        font.setFontName("Microsoft JhengHei");
+        style.setFont(font);
+        style.setAlignment(HorizontalAlignment.LEFT); // 水平靠左
+        style.setVerticalAlignment(VerticalAlignment.CENTER);
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
+        return style;
+    }
+
+
 }

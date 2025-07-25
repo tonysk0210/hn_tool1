@@ -28,10 +28,10 @@ public class App {
                 Scanner scanner = new Scanner(System.in);
 
                 while (true) {
-                    System.out.println("====== 功能選單 ======");
+                    System.out.println("\n====== 功能選單 ======");
                     System.out.println("1. 匯出所有資料表 Schema(Excel)");
                     System.out.println("2. 匯出所有資料表 Schema(PDF)");
-                    System.out.println("0. 回主選單");
+                    System.out.println("0. 返回主選單");
                     System.out.print("請輸入選項：");
 
                     String choice = scanner.nextLine().trim();
@@ -66,6 +66,7 @@ public class App {
                             break;
 
                         case "0":
+//                            System.out.println("\n程式結束 謝謝使用");
                             return;
 
                         default:
@@ -86,6 +87,11 @@ public class App {
 
     private static File chooseDirectory() {
         JFileChooser chooser = new JFileChooser();
+
+        // ✅ 設定預設開啟目錄為專案根目錄
+        File projectDir = new File(System.getProperty("user.dir")); // 專案目錄
+        chooser.setCurrentDirectory(projectDir);
+
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setDialogTitle("選擇匯出資料夾");
 
@@ -96,6 +102,7 @@ public class App {
 
         return (result == JFileChooser.APPROVE_OPTION) ? chooser.getSelectedFile() : null;
     }
+
 
     private static String askFileName(String title) {
         String input = JOptionPane.showInputDialog(null, title, "自訂檔名", JOptionPane.PLAIN_MESSAGE);
