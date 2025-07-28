@@ -45,6 +45,7 @@ public class SchemaExcelExporter {
                         "    LEFT JOIN sys.indexes i ON ic.object_id = i.object_id AND ic.index_id = i.index_id\n" +
                         "    WHERE t.is_ms_shipped = 0 AND t.name NOT IN ('sysdiagrams')\n" +
                         ") b ON a.Table_Name = b.表格名稱\n" +
+                        "WHERE a.Table_Name not in ('sysdiagrams')"+
                         "ORDER BY b.模組別, b.表格名稱, b.序號;";
 
 

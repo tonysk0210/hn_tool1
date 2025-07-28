@@ -29,11 +29,12 @@ public class TableMetaDataCSVHandler {
 
         while (true) {
 
-            System.out.println("====== 功能選單 ======");
-            System.out.println("1. 匯出 .csv 供人工修改");
-            System.out.println("2. 將修改後 .csv 寫入 HN_Table_List 資料表");
-            System.out.println("0. 回主選單");
-            System.out.print("請輸入選項（0-2）：");
+            System.out.println("──────────── (匯出 / 匯入 CSV 模組資料) ────────────");
+            System.out.println("1.   匯出 .csv 供人工修改");
+            System.out.println("2.   將修改後 .csv 寫入 HN_Table_List 資料表");
+            System.out.println("0.   回主選單");
+            System.out.println("─────────────────────────────────────────────────");
+            System.out.print("請輸入選項（0～2）：");
 
             String input = scanner.nextLine().trim();
 

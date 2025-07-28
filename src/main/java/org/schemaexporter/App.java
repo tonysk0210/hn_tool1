@@ -28,11 +28,12 @@ public class App {
                 Scanner scanner = new Scanner(System.in);
 
                 while (true) {
-                    System.out.println("\n====== 功能選單 ======");
-                    System.out.println("1. 匯出所有資料表 Schema(Excel)");
-                    System.out.println("2. 匯出所有資料表 Schema(PDF)");
-                    System.out.println("0. 返回主選單");
-                    System.out.print("請輸入選項：");
+                    System.out.println("──────── (匯出資料表 Schema (Excel / PDF)) ────────");
+                    System.out.println("1.   匯出所有資料表 Schema (Excel)");
+                    System.out.println("2.   匯出所有資料表 Schema (PDF)");
+                    System.out.println("0.   回主選單");
+                    System.out.println("─────────────────────────────────────────────────");
+                    System.out.print("請輸入選項（0～2）：");
 
                     String choice = scanner.nextLine().trim();
 

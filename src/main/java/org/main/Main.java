@@ -92,11 +92,13 @@ public class Main {
 
     private static void showMainMenu() {
         while (true) {
-            System.out.println("\n========== 主選單 ==========");
-            System.out.println("1. 匯出 / 匯入 CSV 模組資料");
-            System.out.println("2. 匯出資料表 Schema (Excel / PDF)");
-            System.out.println("0. 離開程式");
-            System.out.print("請輸入選項：");
+            System.out.println();
+            System.out.println("============== 主選單 ==============");
+            System.out.printf("%-4s %s%n", "1.", "匯出 / 匯入 CSV 模組資料");
+            System.out.printf("%-4s %s%n", "2.", "匯出資料表 Schema (Excel / PDF)");
+            System.out.printf("%-4s %s%n", "0.", "離開程式");
+            System.out.println("===================================");
+            System.out.print("請輸入選項（0~2）：");
 
             String input = scanner.nextLine().trim();
 
