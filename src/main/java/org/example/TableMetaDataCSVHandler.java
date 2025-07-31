@@ -12,11 +12,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
-public class TableMetaDataCSVHandler {
+import org.config.ConfigLoader;
+import org.config.DbConfig;
 
-    private static final String JDBC_URL = ConfigLoader.get("jdbc.url");
-    private static final String USER = ConfigLoader.get("jdbc.user");
-    private static final String PASSWORD = ConfigLoader.get("jdbc.password");
+public class TableMetaDataCSVHandler {
 
     //以timestamp自動產出.CSV檔名
     private static String generateTimestampedFilename() {
@@ -30,14 +29,14 @@ public class TableMetaDataCSVHandler {
 
         while (true) {
 
-            System.out.println("==== MENU ====");
-            System.out.println("1. 匯出 .csv 供人工修改");
-            System.out.println("2. 將修改後 .csv 寫入 HN_Table_List 資料表");
-            System.out.println("0. 離開程式");
-            System.out.print("請輸入選項（0-2）：");
+            System.out.println("──────────── (匯出 / 匯入 CSV 模組資料) ────────────");
+            System.out.println("1.   匯出 .csv 供人工修改");
+            System.out.println("2.   將修改後 .csv 寫入 HN_Table_List 資料表");
+            System.out.println("0.   回主選單");
+            System.out.println("─────────────────────────────────────────────────");
+            System.out.print("請輸入選項（0～2）：");
 
             String input = scanner.nextLine().trim();
-            System.out.println();
 
             try {
                 switch (input) {
@@ -48,6 +47,7 @@ public class TableMetaDataCSVHandler {
                         break;
                     case "2":
                         JFileChooser fileChooser = new JFileChooser();
+                        System.out.println("📂 請選擇要匯入的 .csv 檔案");
                         fileChooser.setDialogTitle("請選擇要匯入的 .csv 檔案");
                         fileChooser.setCurrentDirectory(new File(System.getProperty("user.dir")));
                         fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("CSV 檔案 (*.csv)", "csv"));
@@ -57,17 +57,17 @@ public class TableMetaDataCSVHandler {
                         if (result == JFileChooser.APPROVE_OPTION) {
                             File selectedFile = fileChooser.getSelectedFile();
                             String inputPath = selectedFile.getAbsolutePath();
-                            System.out.println("📂 選擇的檔案：" + inputPath);
+                            System.out.println("\uD83D\uDCC4 選擇的檔案：" + inputPath);
                             importFromCSV(inputPath);
                         } else {
-                            System.err.println("⚠ 已取消選擇檔案，未執行匯入。");
+                            System.out.println("⚠\uFE0F 已取消選擇檔案，未執行匯入。");
+                            System.out.println();
                         }
                         break;
                     case "0":
-                        System.out.println("👋 程式結束，Bye！");
                         return; // 離開主程式
                     default:
-                        System.out.println("⚠ 無效的輸入，請重新選擇 0、1 或 2。");
+                        System.out.println("⚠\uFE0F 無效的輸入，請重新選擇 0、1 或 2。");
                         System.out.println();
                         continue;
                 }
@@ -82,7 +82,6 @@ public class TableMetaDataCSVHandler {
                 e.printStackTrace();
             }
 
-            System.out.println(); // 換行，美觀
         }
     }
 
@@ -106,25 +105,27 @@ public class TableMetaDataCSVHandler {
      * @throws Exception    其他未預期的例外狀況
      */
     private static void exportToCSV(String csvPath) throws Exception {
-        String query = """
-                SELECT ISNULL(f.value, '') AS System_Name,
-                       ROW_NUMBER() OVER (PARTITION BY f.value ORDER BY f.value, t.name) AS Seq,
-                       t.name AS Table_Name,
-                       ISNULL(e.value, '') AS Table_Desc
-                FROM sys.tables t
-                LEFT JOIN (
-                    SELECT major_id, name, value FROM sys.extended_properties
-                    WHERE name = '用途說明'
-                ) e ON t.object_id = e.major_id
-                LEFT JOIN (
-                    SELECT major_id, name, value FROM sys.extended_properties
-                    WHERE name = '模組別'
-                ) f ON t.object_id = f.major_id
-                WHERE ISNULL(f.value, '') <> 'HN_Tools' -- ❗ 根據模組別排除
-                ORDER BY t.name
-                """;
+        String query = "SELECT ISNULL(f.value, '') AS System_Name, " +
+                "       ROW_NUMBER() OVER (PARTITION BY f.value ORDER BY f.value, t.name) AS Seq, " +
+                "       t.name AS Table_Name, " +
+                "       ISNULL(e.value, '') AS Table_Desc " +
+                "FROM sys.tables t " +
+                "LEFT JOIN ( " +
+                "    SELECT major_id, name, value FROM sys.extended_properties " +
+                "    WHERE name = '用途說明' " +
+                ") e ON t.object_id = e.major_id " +
+                "LEFT JOIN ( " +
+                "    SELECT major_id, name, value FROM sys.extended_properties " +
+                "    WHERE name = '模組別' " +
+                ") f ON t.object_id = f.major_id " +
+                "WHERE ISNULL(f.value, '') <> 'HN_Tools' " + // ❗ 根據模組別排除
+                "ORDER BY t.name";
+        ;
 
-        try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
+        try (Connection conn = DriverManager.getConnection(
+                DbConfig.getJdbcUrl(),
+                DbConfig.username,
+                DbConfig.password);
              Statement stmt = conn.createStatement();
              ResultSet resultSet = stmt.executeQuery(query);
              FileOutputStream fos = new FileOutputStream(csvPath);
@@ -152,6 +153,7 @@ public class TableMetaDataCSVHandler {
                 }
                 File file = new File(csvPath);
                 System.out.println("✅ .csv 匯出完成 (絕對路徑)：" + file.getAbsolutePath());
+                System.out.println();
             }
         }
     }
@@ -185,7 +187,10 @@ public class TableMetaDataCSVHandler {
      * @throws SQLException          如果資料庫操作發生錯誤
      */
     private static void importFromCSV(String csvPath) throws Exception {
-        try (Connection conn = DriverManager.getConnection(JDBC_URL, USER, PASSWORD);
+        try (Connection conn = DriverManager.getConnection(
+                DbConfig.getJdbcUrl(),
+                DbConfig.username,
+                DbConfig.password);
              CSVReader csvReader = new CSVReader(new InputStreamReader(new FileInputStream(csvPath), "UTF-8"))) {
 
             conn.setAutoCommit(false);
@@ -214,7 +219,7 @@ public class TableMetaDataCSVHandler {
 
                     // 偵測問題行
                     if (row.length < 4) {
-                        System.err.printf("⚠ 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, String.join(",", row));
+                        System.err.printf("⚠\uFE0F 第 %d 行格式錯誤（欄位數不足）：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                         continue;
                     }
@@ -234,7 +239,7 @@ public class TableMetaDataCSVHandler {
                         pstmt.addBatch();
                         successCount++;
                     } catch (NumberFormatException nfe) {
-                        System.err.printf("⚠ 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, String.join(",", row));
+                        System.err.printf("⚠\uFE0F 第 %d 行 Seq 欄位非數字：%s%n", lineNumber, String.join(",", row));
                         failCount++;
                     }
                 }
@@ -244,11 +249,12 @@ public class TableMetaDataCSVHandler {
                     System.out.printf("✅ 匯入成功，總筆數：%d%n", successCount);
                 } else {
                     conn.rollback();
-                    System.err.printf("❌ 匯入失敗，偵測到 %d 筆錯誤，已取消所有變更。%n", failCount);
+                    System.out.printf("❌ 匯入失敗，偵測到 %d 筆錯誤，已取消所有變更。%n", failCount);
                 }
+                System.out.println();
             } catch (CsvValidationException e) {
                 conn.rollback();
-                throw new IOException("CSV 格式解析錯誤", e);
+                throw new IOException("⚠\uFE0F CSV 格式解析錯誤", e);
             } catch (Exception e) {
                 conn.rollback();
                 throw e;
@@ -264,18 +270,16 @@ public class TableMetaDataCSVHandler {
      * @throws SQLException 若建立資料表或執行 SQL 時發生錯誤
      */
     private static void createTableIfNotExists(Connection conn) throws SQLException {
-        String sql = """
-                    IF NOT EXISTS (
-                        SELECT * FROM INFORMATION_SCHEMA.TABLES 
-                        WHERE TABLE_NAME = 'HN_Table_List'
-                    )
-                    CREATE TABLE HN_Table_List (
-                        System_Name NVARCHAR(100),
-                        Seq INT,
-                        Table_Name NVARCHAR(100),
-                        Table_Desc NVARCHAR(500)
-                    )
-                """;
+        String sql = "IF NOT EXISTS ( " +
+                "    SELECT * FROM INFORMATION_SCHEMA.TABLES " +
+                "    WHERE TABLE_NAME = 'HN_Table_List' " +
+                ") " +
+                "CREATE TABLE HN_Table_List ( " +
+                "    System_Name NVARCHAR(100), " +
+                "    Seq INT, " +
+                "    Table_Name NVARCHAR(100), " +
+                "    Table_Desc NVARCHAR(500) " +
+                ")";
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         }
